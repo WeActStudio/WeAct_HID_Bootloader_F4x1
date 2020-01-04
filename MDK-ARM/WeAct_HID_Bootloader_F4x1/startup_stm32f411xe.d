@@ -1,0 +1,1 @@
+weact_hid_bootloader_f4x1\startup_stm32f411xe.o: startup_stm32f411xe.s
