@@ -27,8 +27,6 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "hid_bootloader.h"
-
-#include "key.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -89,7 +87,7 @@ int main(void)
   /* USER CODE BEGIN SysInit */
 	
   MX_GPIO_Init();
-	HAL_Delay(2);
+	HAL_Delay(1);
 	hid_bootloader_Init();
 	while(HAL_GPIO_ReadPin(KEY_GPIO_Port,KEY_Pin) == BOOT_ENABLED)
 	{
@@ -133,12 +131,12 @@ int main(void)
 				if(timeflag == 0)
 				{
 					time ++;
-					if(time >= 1600) timeflag = 1;
+					if(time >= 1200) timeflag = 1;
 				}
 				else
 				{
 					time --;
-					if(time == 0) timeflag = 0;
+					if(time <= 110) timeflag = 0;
 				}
 
 				/* 占空比设置 */
@@ -154,42 +152,48 @@ int main(void)
 				else HAL_GPIO_WritePin(C13_GPIO_Port,C13_Pin,GPIO_PIN_RESET);
 			}
 		}
-		/* 1ms 按键扫描 */
-	  if(HAL_GetTick() - tick1 >= 1)
-	  {
-		  tick1 = HAL_GetTick();
-		  key_check_all_loop_1ms();
-	  }
 		
-		/* Key按键按下查询 */
-	  if(HAL_GetTick() - tick2 >= 10)
-	  {
-		  tick2 = HAL_GetTick();
-		  key_value = key_read_value();
-		  
-		  if(key_value == KEY0_UP_SHORT)
-		  {
-			  breathsw = 0;
-			  HAL_GPIO_WritePin(C13_GPIO_Port,C13_Pin,HAL_GPIO_ReadPin(C13_GPIO_Port,C13_Pin)==GPIO_PIN_SET?GPIO_PIN_RESET:GPIO_PIN_SET);
-		  }
-		  else if(key_value == KEY0_UP_DOUBLE)
-		  {
-			  breathsw = 0;
-			  HAL_GPIO_WritePin(C13_GPIO_Port,C13_Pin,HAL_GPIO_ReadPin(C13_GPIO_Port,C13_Pin)==GPIO_PIN_SET?GPIO_PIN_RESET:GPIO_PIN_SET);
-		  }
-		  else if(key_value == KEY0_LONG)
-		  {
-				while(HAL_GPIO_ReadPin(KEY_GPIO_Port,KEY_Pin) == BOOT_ENABLED)
-				{
-					HAL_GPIO_TogglePin(C13_GPIO_Port,C13_Pin);
-					HAL_Delay(60);
-				}
-				HAL_Delay(100);
-			  breathsw = 0;
-				HAL_NVIC_SystemReset();
+		if(HAL_GetTick() - tick1 >= 50)
+		{
+			tick1 = HAL_GetTick();
+			
+			static GPIO_PinState KEY_last = GPIO_PIN_SET;
+			static uint32_t long_press_count = 0;
+			
+			if(HAL_GPIO_ReadPin(KEY_GPIO_Port,KEY_Pin) == BOOT_ENABLED)
+			{
+				KEY_last = BOOT_ENABLED;
 				
-		  }
-	  }
+				long_press_count ++;
+				if(long_press_count > 12) // 0.6s
+				{
+					/* long press */
+					while(HAL_GPIO_ReadPin(KEY_GPIO_Port,KEY_Pin) == BOOT_ENABLED)
+					{
+						HAL_GPIO_TogglePin(C13_GPIO_Port,C13_Pin);
+						HAL_Delay(100);
+					}
+					/*  Jump to Embedded bootloader */
+					USBD_DeInit(&hUsbDeviceFS);
+					HAL_GPIO_WritePin(C13_GPIO_Port,C13_Pin,GPIO_PIN_SET);
+					HAL_Delay(10);
+					HAL_DeInit();
+					hid_bootloader_Jump(System_ISP_ADD);
+				}
+			}
+			else if(HAL_GPIO_ReadPin(KEY_GPIO_Port,KEY_Pin) != KEY_last)
+			{
+				KEY_last = HAL_GPIO_ReadPin(KEY_GPIO_Port,KEY_Pin);
+				
+				/* short press */
+				if(long_press_count < 8)
+				{
+					HAL_GPIO_WritePin(C13_GPIO_Port,C13_Pin,GPIO_PIN_SET);
+					breathsw = breathsw == 0?1:0;
+				}
+				long_press_count = 0;
+			}
+		}
   }
   /* USER CODE END 3 */
 }

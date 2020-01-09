@@ -4,7 +4,6 @@
 #include "rtc.h"
 #include <string.h>
 
-#include "usbd_core.h"
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
 typedef void (*pFunction)(void);
@@ -18,7 +17,7 @@ static uint8_t CMD_SIGNATURE[6] = {'W','e','A','c','t',':'}; // "WeAct: "
 /* Command: <Send next data pack> */
 // static uint8_t CMD_DATA_RECEIVED[7] = {'W','e','A','c','t',':',2};// "WeAct: <cmd>"
 
-#define FW_Version "V1.0"
+#define FW_Version "V1.1"
 #define Flash_Size (0x1FFF7A22UL)
 
 #define CMD_ResetPage (0x00)
@@ -57,7 +56,8 @@ void hid_bootloader_Init(void)
 	
 	if((HAL_GPIO_ReadPin(KEY_GPIO_Port,KEY_Pin) != BOOT_ENABLED) && (updateflag !=0x1234))
 	{
-		hid_bootloader_GotoApp();
+		//hid_bootloader_GotoApp();
+		hid_bootloader_Jump(USBD_HID_APP_DEFAULT_ADD);
 	}
 
 //	/* Enable Power Clock */
@@ -72,23 +72,21 @@ void hid_bootloader_Init(void)
 //	__HAL_RCC_PWR_CLK_DISABLE();
 }
 
-void hid_bootloader_GotoApp(void)
+void hid_bootloader_Jump(uint32_t addr)
 {
-		if(((*(__IO uint32_t*)USBD_HID_APP_DEFAULT_ADD) & 0x2FF80000 ) == 0x20000000)
-		{
-			pFunction JumpToApplication;
-      uint32_t JumpAddress;
-			
-			HAL_GPIO_DeInit(C13_GPIO_Port,C13_Pin);
+	if(((*(__IO uint32_t*)addr) & 0x2FF80000 ) == 0x20000000)
+	{
+		pFunction JumpToApplication;
+		uint32_t JumpAddress;
+		
+		/* Jump to user application */
+		JumpAddress = *(__IO uint32_t*) (addr + 4);
+		JumpToApplication = (pFunction) JumpAddress;
 
-			/* Jump to user application */
-			JumpAddress = *(__IO uint32_t*) (USBD_HID_APP_DEFAULT_ADD + 4);
-			JumpToApplication = (pFunction) JumpAddress;
-
-			/* Initialize user application's Stack Pointer */
-			__set_MSP(*(__IO uint32_t*) USBD_HID_APP_DEFAULT_ADD);
-			JumpToApplication();			
-		}
+		/* Initialize user application's Stack Pointer */
+		__set_MSP(*(__IO uint32_t*) addr);
+		JumpToApplication();			
+	}
 }
 
 void hid_bootloader_Run(void)
@@ -108,30 +106,28 @@ void hid_bootloader_Run(void)
 				current_Page = 16;
 				currentPageOffset = 0;
 				erase_page = 1;
-				// HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_0);	
 				break;
 
 				case CMD_Reboot:
 
 				/*------------- Reset MCU */
-				if (currentPageOffset > 0) {
+//				if (currentPageOffset > 0) {
 
-				/* There are incoming
-					 data that are less
-					 than sector size
-					 (16384) */
-					write_flash_sector(current_Page);
-				}
-				HAL_Delay(50);
-				//USBD_DeInit(&hUsbDeviceFS);
-				USBD_LL_Stop(&hUsbDeviceFS);
+//				/* There are incoming
+//					 data that are less
+//					 than sector size
+//					 (16384) */
+//					write_flash_sector(current_Page);
+//				}
+				HAL_Delay(10);
+				USBD_DeInit(&hUsbDeviceFS);
+				HAL_Delay(10);
 				HAL_NVIC_SystemReset();
 				break;
 				
 				case CMD_FW_Ver:
 					memcpy(USB_TX_Buffer,CMD_SIGNATURE,sizeof(CMD_SIGNATURE));
 				  sprintf((char *)&USB_TX_Buffer[sizeof(CMD_SIGNATURE)],"%s 0x%X ROM: %dKB",FW_Version,HAL_GetDEVID(),mcuGetFlashSize());
-					//memcpy(&USB_TX_Buffer[sizeof(CMD_SIGNATURE)],FW_Version,sizeof(FW_Version));
 					USBD_CUSTOM_HID_SendReport(&hUsbDeviceFS, USB_TX_Buffer, sizeof(USB_TX_Buffer));
 				break;
 				case CMD_Erase:

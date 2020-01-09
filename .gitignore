@@ -1,10 +1,13 @@
 *.o
+*.d
 .DS_Store
 *~
 *.uvopt
+*.uvoptx
 *.dep
 *.bak
 *.uvgui.*
+*.uvguix.*
 *.swp
 *.save
 .project
